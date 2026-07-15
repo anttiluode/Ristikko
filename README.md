@@ -1,5 +1,8 @@
 # Ristikko
 
+EDIT: Added - https://anttiluode.github.io/Ristikko/ phase-space attractor memory.
+
+
 *(Finnish: **lattice / grid**.)*
 
 The composition test between two wave-computing frameworks — the Geometric
