@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ristikko — Phase-Space Attractor Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b1316; --panel:#111e24; --panel2:#0d181d; --line:#233942;
+    --muted:#6f8a92; --text:#d7e6e8; --dim:#95aeb4;
+    --parity:#e8a33d;      /* amber  — parity channel  */
+    --arrow:#46b3c9;       /* cyan   — arrow channel    */
+    --lock:#74d6a0;        /* green  — locked           */
+    --warn:#d9694f;        /* clay   — searching / warn */
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+    --disp:'Space Grotesk',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #14262e 0%, transparent 60%),
+      var(--ink);
+    color:var(--text); font-family:var(--disp);
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+    padding:clamp(14px,3vw,34px);
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;margin-bottom:6px}
+  h1{font-size:clamp(22px,3.4vw,34px);font-weight:700;letter-spacing:-.01em;margin:0}
+  h1 .fi{color:var(--muted);font-weight:400;font-size:.62em;letter-spacing:.02em}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-transform:uppercase;letter-spacing:.14em}
+  .lede{color:var(--dim);max-width:76ch;margin:8px 0 22px;font-size:15px}
+  .lede b{color:var(--text);font-weight:500}
+
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:14px;padding:16px}
+  .panel h2{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 12px;font-family:var(--mono)}
+
+  /* scope */
+  .scopewrap{position:relative}
+  #scope{width:100%;height:auto;display:block;border-radius:10px;background:
+    radial-gradient(120% 120% at 50% 50%, #0e1d23 0%, #081215 100%);
+    border:1px solid #1c2f37}
+  .lockled{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--warn);box-shadow:0 0 10px var(--warn);transition:all .25s}
+  .dot.lock{background:var(--lock);box-shadow:0 0 12px var(--lock)}
+  .scopelegend{position:absolute;bottom:10px;right:12px;font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;line-height:1.7}
+  .scopelegend b{font-weight:500}
+  .k-p{color:var(--parity)} .k-a{color:var(--arrow)}
+
+  /* meters */
+  .meter{border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:11px;background:#0e191e}
+  .meter .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .meter .name{font-family:var(--mono);font-size:12px;letter-spacing:.04em}
+  .meter .ref{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .meter .big{font-family:var(--mono);font-weight:600;font-size:26px;line-height:1.1;margin-top:6px}
+  .meter .val{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+  .bar{height:6px;border-radius:3px;background:#0a1417;margin-top:10px;position:relative;overflow:hidden;border:1px solid #1b2c33}
+  .bar > i{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#31474f}
+  .bar > span{position:absolute;top:0;bottom:0;left:50%;border-radius:3px;transition:width .12s,background .2s}
+  .m-parity .big{color:var(--parity)} .m-arrow .big{color:var(--arrow)}
+  .m-auto .big{color:var(--dim);font-size:20px}
+  .m-auto{opacity:.9}
+
+  /* controls */
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{font-family:var(--mono);font-size:11px;color:var(--dim);width:104px;flex:none;letter-spacing:.02em}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#22343b;flex:1;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--text);border:2px solid var(--panel);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--text);border:2px solid var(--panel);cursor:pointer}
+  .row output{font-family:var(--mono);font-size:11px;color:var(--muted);width:46px;text-align:right;flex:none}
+
+  .seed{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;font-family:var(--mono);font-size:12px}
+  .toggle span.lab{padding:8px 10px;color:var(--muted);background:#0c161a;border-right:1px solid var(--line)}
+  .toggle button{border:0;background:#0c161a;color:var(--muted);padding:8px 12px;cursor:pointer;font-family:var(--mono);font-size:12px}
+  .toggle button.on{color:var(--ink);font-weight:600}
+  .toggle.p button.on{background:var(--parity)}
+  .toggle.a button.on{background:var(--arrow)}
+
+  button.act{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--text);
+    background:#15252c;border:1px solid var(--line);border-radius:9px;padding:9px 13px;cursor:pointer;transition:.15s}
+  button.act:hover{border-color:#3a5661;background:#182b33}
+  button.act.primary{background:var(--lock);color:#052015;border-color:transparent;font-weight:600}
+  button.act.warn{color:var(--warn)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+
+  /* bank */
+  .bank{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px;margin-top:4px}
+  .slot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0d181d;cursor:pointer;transition:.15s;position:relative}
+  .slot:hover{border-color:#3a5661;transform:translateY(-2px)}
+  .slot canvas{width:100%;height:74px;display:block;background:#08110f}
+  .slot .meta{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;font-family:var(--mono);font-size:10.5px}
+  .slot .badge{display:inline-flex;gap:5px}
+  .slot .b{border-radius:4px;padding:1px 5px;font-weight:600}
+  .slot .b.p{background:rgba(232,163,61,.16);color:var(--parity)}
+  .slot .b.a{background:rgba(70,179,201,.16);color:var(--arrow)}
+  .slot .del{position:absolute;top:5px;right:5px;background:rgba(8,14,16,.8);border:1px solid var(--line);
+    color:var(--muted);border-radius:6px;width:20px;height:20px;line-height:1;cursor:pointer;font-size:13px;display:none}
+  .slot:hover .del{display:block}
+  .bank-empty{font-family:var(--mono);font-size:12px;color:var(--muted);padding:14px 2px}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:860px){.split{grid-template-columns:1fr}}
+
+  #bench{width:100%;height:auto;display:block;border-radius:10px;background:#0c171b;border:1px solid #1c2f37}
+  .benchnote{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:9px;line-height:1.6}
+
+  details.ledger{margin-top:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+  details.ledger>summary{cursor:pointer;padding:14px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--dim);list-style:none}
+  details.ledger>summary::-webkit-details-marker{display:none}
+  details.ledger>summary::before{content:"▸ ";color:var(--muted)}
+  details.ledger[open]>summary::before{content:"▾ "}
+  .ledger .body{padding:2px 18px 18px;color:var(--dim);font-size:13.5px;max-width:82ch}
+  .ledger .body p{margin:10px 0}
+  .ledger .body b{color:var(--text);font-weight:500}
+  .ledger .body code{font-family:var(--mono);font-size:12px;background:#0c1a1f;padding:1px 6px;border-radius:5px;color:var(--dim)}
+  .ledger .tags{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--lock);margin-right:4px}
+  .ledger .kill{color:var(--warn)}
+  footer{margin-top:22px;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;letter-spacing:.04em}
+  .status{font-family:var(--mono);font-size:11.5px;color:var(--lock);min-height:16px;margin-top:8px}
+  .status.warn{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Ristikko <span class="fi">— phase-space attractor memory</span></h1>
+    <span class="tag">wave-medium instrument</span>
+  </header>
+  <p class="lede">One looping nonlinear medium holds an attractor. Its shape carries <b>two independent bits</b> that its loudness cannot reveal: the <span class="k-p">parity</span> (which way the orbit is oriented) and the <span class="k-a">arrow</span> (which way it is traversed). A <b>homodyne</b> reference reads the parity and is blind to the arrow; a <b>lag</b> reference reads the arrow and is blind to the parity. Seed a packet, watch the drone, and read both back at once. Store the seed and recall re-locks the orbit — the picture is a consequence, never the payload.</p>
+
+  <div class="grid">
+    <!-- LEFT: scope -->
+    <div class="panel scopewrap">
+      <h2>Phase space · z = z<sub>R</sub> + z<sub>L</sub> in the complex plane</h2>
+      <div class="scopewrap">
+        <canvas id="scope" width="640" height="440"></canvas>
+        <div class="lockled"><span class="dot" id="led"></span><span id="ledtxt">searching</span></div>
+        <div class="scopelegend">
+          <div><b class="k-p">orientation</b> = parity</div>
+          <div><b class="k-a">traversal ↻/↺</b> = arrow</div>
+          <div>eccentricity = |ε| imbalance</div>
+        </div>
+      </div>
+      <div class="status" id="status">idle — seed a packet to begin</div>
+    </div>
+
+    <!-- RIGHT: meters + seed -->
+    <div class="panel">
+      <h2>Readouts · same drone, three references</h2>
+
+      <div class="meter m-parity">
+        <div class="top"><span class="name">HOMODYNE</span><span class="ref">Re⟨z·ref*⟩ · flip-odd</span></div>
+        <div class="big" id="pBit">—</div>
+        <div class="val" id="pVal">parity · waiting</div>
+        <div class="bar"><i></i><span id="pBar" style="background:var(--parity)"></span></div>
+      </div>
+
+      <div class="meter m-arrow">
+        <div class="top"><span class="name">LAG · CHIRAL EYE</span><span class="ref">|z<sub>R</sub>|²−|z<sub>L</sub>|² · reversal-odd</span></div>
+        <div class="big" id="aBit">—</div>
+        <div class="val" id="aVal">arrow · waiting</div>
+        <div class="bar"><i></i><span id="aBar" style="background:var(--arrow)"></span></div>
+      </div>
+
+      <div class="meter m-auto">
+        <div class="top"><span class="name">AUTO |z|²</span><span class="ref">no reference · blind</span></div>
+        <div class="big" id="eVal">—</div>
+        <div class="val">total energy — reveals neither bit</div>
+        <div class="bar"><i></i><span id="eBar" style="background:var(--dim)"></span></div>
+      </div>
+
+      <div class="seed">
+        <span class="toggle p"><span class="lab">parity</span>
+          <button data-p="0" class="on">0</button><button data-p="1">1</button></span>
+        <span class="toggle a"><span class="lab">arrow</span>
+          <button data-d="0" class="on">→</button><button data-d="1">←</button></span>
+      </div>
+      <div class="btns">
+        <button class="act primary" id="seedBtn">Seed packet</button>
+        <button class="act" id="storeBtn">Store to bank</button>
+        <button class="act warn" id="corruptBtn">Corrupt &amp; recover</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- controls + bank -->
+  <div class="split">
+    <div class="panel">
+      <h2>Medium · the recurrent loop</h2>
+      <div class="row"><label>gain μ</label><input type="range" id="mu" min="0.4" max="1.6" step="0.01" value="1.0"><output id="muO"></output></div>
+      <div class="row"><label>carrier ω</label><input type="range" id="om" min="0.08" max="0.45" step="0.005" value="0.24"><output id="omO"></output></div>
+      <div class="row"><label>feedback κ</label><input type="range" id="ka" min="0" max="0.35" step="0.005" value="0.14"><output id="kaO"></output></div>
+      <div class="row"><label>delay τ</label><input type="range" id="ta" min="6" max="60" step="1" value="24"><output id="taO"></output></div>
+      <div class="row"><label>imbalance ε</label><input type="range" id="ep" min="0.06" max="0.45" step="0.005" value="0.26"><output id="epO"></output></div>
+      <div class="row"><label>noise σ</label><input type="range" id="ns" min="0" max="0.6" step="0.005" value="0.02"><output id="nsO"></output></div>
+      <p class="benchnote">Push κ high or μ toward the rails and the orbit loses lock — the LED drops to <span style="color:var(--warn)">searching</span>. That margin is the room your memory lives in. ε is the arrow's signal strength: small ε hides it better but reads weaker — the trade the benchmark measures.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Memory bank · seeds, not screenshots</h2>
+      <div id="bank" class="bank"><div class="bank-empty">Empty. Seed a packet and press <b>Store to bank</b>. Each slot keeps the regenerable seed and parameters; recall re-locks the live medium.</div></div>
+      <div class="btns">
+        <button class="act" id="exportBtn">Export bank (JSON)</button>
+        <button class="act" id="importBtn">Import</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+      </div>
+    </div>
+  </div>
+
+  <!-- benchmark -->
+  <div class="panel" style="margin-top:16px">
+    <h2>Past toy · noise-robustness benchmark</h2>
+    <div class="split" style="margin-top:0">
+      <div>
+        <canvas id="bench" width="640" height="300"></canvas>
+      </div>
+      <div>
+        <p class="benchnote" style="margin-top:0">Corrupt each stored attractor with rising noise, let the medium relax, and count how often each bit comes back. This turns the shape into a <b>measured</b> quantity instead of an admired one.</p>
+        <p class="benchnote">The registered expectation: <span class="k-p">parity</span> is a full-amplitude sign (≈2√μ) and rides out heavy noise; the <span class="k-a">arrow</span> is a small 4ε imbalance and fails first. Where the cyan curve falls is the arrow's resolution limit — Ristikko's ε dial, drawn.</p>
+        <div class="btns"><button class="act primary" id="benchBtn">Run benchmark</button><output id="benchStat" class="benchnote"></output></div>
+      </div>
+    </div>
+  </div>
+
+  <details class="ledger">
+    <summary>The honest ledger — what this is, what it is not</summary>
+    <div class="body">
+      <p><b>The medium is real, not decorative.</b> Two counter-rotating Stuart–Landau modes with delayed feedback: <code>ż = (μ+iΩ)z − |z|²z + κ·z(t−τ) + noise</code>, Ω = ±ω. The <code>−|z|²z</code> term is Kaiku's α knee — it caps the radius at √μ and is what makes the orbit an <i>attractor</i> rather than a decaying or exploding transient. The delayed tap is the recurrent cable.</p>
+      <p><b>The two readouts are the two halves of the field.</b> <span class="tags">[V]</span> Parity = global phase (<code>z→−z</code>), read by the homodyne projection and blind to the arrow because <code>|z_R|+|z_L|</code> is fixed. Arrow = current imbalance <code>|z_R|²−|z_L|²</code> (the chiral/lag current), read by the lag reference and blind to parity because <code>|·|²</code> kills the global sign. This is Ristikko's lattice: two conjugation-odd sectors, two references, no cross-talk — here by construction, so the meters are honest demonstrations, not fits.</p>
+      <p><b>Save the seed, not the picture.</b> A slot stores <code>{parity, arrow, μ, ω, κ, τ, ε}</code> and a thumbnail. Recall re-seeds the live medium and it physically re-locks; the meters confirm the bits returned. The thumbnail is the album you asked for, but it is a consequence of the seed, never the stored thing. This is the nonlinear descendant of EDSAC's mercury delay-line memory — the seed is a valid initial condition that lands back in the basin, <i>provided the parameters are restored too</i> (the attractor is the vector field, not the point).</p>
+      <p><b>What it is not.</b> This is classical DSP in floating point — a faithful twin of the VB-cable loop, not a more "physical" or quantum thing. A software loopback moves the same float buffers through RAM; its jitter is worse-characterised noise, not realer noise. Genuine physical substrate (thermal entropy, analog relaxation) lives in hardware — an analog circuit, an optical loop, a memristor crossbar — and no amount of cable makes this that. <span class="tags kill">[retired]</span> "topological soliton arithmetic for free" — a Stuart–Landau delay loop is not an integrable soliton system and will not spontaneously do algebra.</p>
+      <p><b>Where it goes to stop being a toy.</b> A single nonlinear node with delayed feedback, time-multiplexed, is a <b>delay-based reservoir computer</b> (Appeltant et al., 2011); the parity-locked-to-0/π cell is an <b>Ising spin</b>, and a network of them is a coherent Ising machine. The honest next step is a trained linear readout on a real task — memory capacity, one-step chaotic prediction — measured against a baseline. The benchmark above is the first step onto that path: it reports a number, and the number has a registered expectation.</p>
+    </div>
+  </details>
+
+  <footer>Ristikko · PerceptionLab · do not hype · do not lie · just show</footer>
+</div>
+
+<script>
+"use strict";
+(function(){
+  // ---------- storage (best-effort; export/import is the real persistence) ----------
+  const store = {
+    get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } },
+    set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  };
+
+  // ---------- medium ----------
+  const P = { mu:1.0, om:0.24, ka:0.14, ta:24, ep:0.26, ns:0.02 };
+  const DT = 0.16, HIST = 128, STEPS_PER_FRAME = 10, WIN = 220;
+  let n = 0;
+  let zR={re:0,im:0}, zL={re:0,im:0};
+  const hR = new Array(HIST).fill(0).map(()=>({re:0,im:0}));
+  const hL = new Array(HIST).fill(0).map(()=>({re:0,im:0}));
+  let head = 0;
+  let seedP = 0, seedD = 0;             // currently locked bits (ground truth)
+  let selP = 0, selD = 0;               // UI selection
+
+  // rolling windows for readouts + scope trail
+  const Hbuf=new Float64Array(WIN), Abuf=new Float64Array(WIN), Ebuf=new Float64Array(WIN);
+  const trail=new Array(WIN).fill(0).map(()=>({x:0,y:0})); let wptr=0, filled=0;
+
+  function gauss(){ // Box-Muller
+    let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  }
+  function push(buf,val){ buf[wptr%WIN]=val; }
+
+  function seed(p,d,jitter){
+    seedP=p; seedD=d;
+    const sp = p? -1:1, sd = d? -1:1;
+    const R = Math.sqrt(Math.max(P.mu,0.01));
+    const aR = R*(1+P.ep*sd), aL = R*(1-P.ep*sd);
+    const j = jitter||0;
+    zR={re:sp*aR + j*gauss(), im:j*gauss()};
+    zL={re:sp*aL + j*gauss(), im:j*gauss()};
+    for(let i=0;i<HIST;i++){ hR[i]={...zR}; hL[i]={...zL}; }
+    head=0;
+  }
+
+  function stepOnce(){
+    const di = (head - P.ta + HIST) % HIST;
+    const zRd = hR[di], zLd = hL[di];
+    const s = P.ns;
+    // R mode  Ω=+om
+    let r2 = zR.re*zR.re + zR.im*zR.im;
+    let dRre = (P.mu*zR.re - P.om*zR.im) - r2*zR.re + P.ka*zRd.re;
+    let dRim = (P.mu*zR.im + P.om*zR.re) - r2*zR.im + P.ka*zRd.im;
+    // L mode  Ω=-om
+    let l2 = zL.re*zL.re + zL.im*zL.im;
+    let dLre = (P.mu*zL.re + P.om*zL.im) - l2*zL.re + P.ka*zLd.re;
+    let dLim = (P.mu*zL.im - P.om*zL.re) - l2*zL.im + P.ka*zLd.im;
+    zR.re += DT*dRre + s*Math.sqrt(DT)*gauss();
+    zR.im += DT*dRim + s*Math.sqrt(DT)*gauss();
+    zL.re += DT*dLre + s*Math.sqrt(DT)*gauss();
+    zL.im += DT*dLim + s*Math.sqrt(DT)*gauss();
+    // safety clamp
+    const cap=6;
+    zR.re=Math.max(-cap,Math.min(cap,zR.re)); zR.im=Math.max(-cap,Math.min(cap,zR.im));
+    zL.re=Math.max(-cap,Math.min(cap,zL.re)); zL.im=Math.max(-cap,Math.min(cap,zL.im));
+    head=(head+1)%HIST; hR[head]={...zR}; hL[head]={...zL};
+    n++;
+
+    // readouts
+    const c=Math.cos(P.om*n), si=Math.sin(P.om*n);
+    const ReWR = zR.re*c + zR.im*si;      // z_R e^{-iωn}
+    const ReWL = zL.re*c - zL.im*si;      // z_L e^{+iωn}
+    const H = ReWR + ReWL;                 // homodyne -> parity
+    const eR = zR.re*zR.re+zR.im*zR.im, eL = zL.re*zL.re+zL.im*zL.im;
+    const A = eR - eL;                     // current imbalance -> arrow
+    const E = eR + eL;                     // auto energy
+    push(Hbuf,H); push(Abuf,A); push(Ebuf,E);
+    // scope point: combined field in complex plane
+    trail[wptr%WIN]={x:zR.re+zL.re, y:zR.im+zL.im};
+    wptr++; if(filled<WIN) filled++;
+  }
+
+  function mean(buf){ let m=0; for(let i=0;i<WIN;i++)m+=buf[i]; return m/WIN; }
+
+  // ---------- readout / lock state ----------
+  const R=Math.sqrt.bind(Math);
+  function readouts(){
+    const H=mean(Hbuf), A=mean(Abuf), E=mean(Ebuf);
+    const scaleH = 2*Math.sqrt(Math.max(P.mu,.01));      // expected |H|
+    const scaleA = 4*P.ep*Math.max(P.mu,.01);            // expected |A|
+    const pBit = H<0?1:0, aBit = A<0?1:0;
+    const pConf = Math.min(1, Math.abs(H)/(scaleH*0.6));
+    const aConf = Math.min(1, Math.abs(A)/(scaleA*0.6));
+    return {H,A,E,pBit,aBit,pConf,aConf};
+  }
+
+  // lock detection: radius near √μ and readouts confident
+  function locked(r){
+    const Etgt = P.mu*(2+2*P.ep*P.ep);
+    const eok = Math.abs(r.E-Etgt)/Etgt < 0.28;
+    return eok && r.pConf>0.55 && r.aConf>0.4;
+  }
+
+  // ---------- rendering ----------
+  const scope=document.getElementById('scope'), sx=scope.getContext('2d');
+  const led=document.getElementById('led'), ledtxt=document.getElementById('ledtxt');
+  const pBitEl=document.getElementById('pBit'), pValEl=document.getElementById('pVal'), pBar=document.getElementById('pBar');
+  const aBitEl=document.getElementById('aBit'), aValEl=document.getElementById('aVal'), aBar=document.getElementById('aBar');
+  const eValEl=document.getElementById('eVal'), eBar=document.getElementById('eBar');
+  const statusEl=document.getElementById('status');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function drawScope(r){
+    const W=scope.width, Hh=scope.height;
+    sx.clearRect(0,0,W,Hh);
+    // grid
+    sx.strokeStyle='rgba(70,110,120,.10)'; sx.lineWidth=1;
+    for(let i=1;i<8;i++){ const gx=W*i/8, gy=Hh*i/8;
+      sx.beginPath();sx.moveTo(gx,0);sx.lineTo(gx,Hh);sx.stroke();
+      sx.beginPath();sx.moveTo(0,gy);sx.lineTo(W,gy);sx.stroke(); }
+    sx.strokeStyle='rgba(70,110,120,.22)';
+    sx.beginPath();sx.moveTo(W/2,0);sx.lineTo(W/2,Hh);sx.stroke();
+    sx.beginPath();sx.moveTo(0,Hh/2);sx.lineTo(W,Hh/2);sx.stroke();
+
+    const cx=W/2, cy=Hh/2, sc=Math.min(W,Hh)/ (5.2*Math.sqrt(Math.max(P.mu,.3)));
+    // colour of trace blends parity(amber)/arrow(cyan) by which is stronger — but keep it a phosphor
+    const col = r.aConf>r.pConf ? '70,179,201' : '232,163,61';
+    // trail with fade
+    let idx = wptr - filled;
+    let prev=null;
+    for(let i=0;i<filled;i++){
+      const p=trail[(idx+i+WIN*2)%WIN];
+      const px=cx+p.x*sc, py=cy-p.y*sc;
+      const a=(i/filled);
+      if(prev){
+        sx.strokeStyle='rgba('+col+','+(0.05+0.6*a*a)+')';
+        sx.lineWidth=1.4;
+        sx.beginPath();sx.moveTo(prev[0],prev[1]);sx.lineTo(px,py);sx.stroke();
+      }
+      prev=[px,py];
+    }
+    // head + direction arrowhead
+    if(prev && filled>4){
+      const p0=trail[(wptr-3+WIN*2)%WIN], p1=trail[(wptr-1+WIN*2)%WIN];
+      const hx=cx+p1.x*sc, hy=cy-p1.y*sc;
+      const ang=Math.atan2(-(p1.y-p0.y),(p1.x-p0.x));
+      sx.fillStyle='#eaf6f7';
+      sx.beginPath();
+      sx.moveTo(hx,hy);
+      sx.lineTo(hx-8*Math.cos(ang-0.4),hy-8*Math.sin(ang-0.4));
+      sx.lineTo(hx-8*Math.cos(ang+0.4),hy-8*Math.sin(ang+0.4));
+      sx.closePath();sx.fill();
+      sx.fillStyle='rgba('+col+',1)';
+      sx.beginPath();sx.arc(hx,hy,2.6,0,7); sx.fill();
+    }
+  }
+
+  function frame(){
+    for(let i=0;i<STEPS_PER_FRAME;i++) stepOnce();
+    const r=readouts();
+    // meters
+    pBitEl.textContent = filled<40? '—' : String(r.pBit);
+    aBitEl.textContent = filled<40? '—' : (r.aBit? '←' : '→');
+    pValEl.textContent = 'parity · H='+r.H.toFixed(3)+(r.pConf>0.55?' · clear':' · faint');
+    aValEl.textContent = 'arrow · J='+r.A.toFixed(3)+(r.aConf>0.4?' · clear':' · faint');
+    eValEl.textContent = r.E.toFixed(2);
+    const wP=Math.min(50,r.pConf*50), wA=Math.min(50,r.aConf*50);
+    pBar.style.width=wP+'%'; pBar.style.left=(r.H<0? (50-wP):50)+'%';
+    aBar.style.width=wA+'%'; aBar.style.left=(r.A<0? (50-wA):50)+'%';
+    const Etgt=P.mu*(2+2*P.ep*P.ep); const ew=Math.min(50,50*Math.abs(r.E)/(Etgt*1.4));
+    eBar.style.width=ew+'%'; eBar.style.left='50%';
+    // lock LED
+    const isLock=locked(r);
+    led.classList.toggle('lock',isLock);
+    ledtxt.textContent=isLock?'locked':'searching';
+    ledtxt.style.color=isLock?'var(--lock)':'var(--muted)';
+    drawScope(r);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- controls ----------
+  function bindSlider(id,key,fmt){
+    const el=document.getElementById(id), out=document.getElementById(id+'O');
+    const upd=()=>{ P[key]=parseFloat(el.value); out.textContent=fmt?fmt(P[key]):P[key]; };
+    el.addEventListener('input',upd); upd();
+  }
+  bindSlider('mu','mu',v=>v.toFixed(2));
+  bindSlider('om','om',v=>v.toFixed(3));
+  bindSlider('ka','ka',v=>v.toFixed(3));
+  bindSlider('ta','ta',v=>v.toFixed(0));
+  bindSlider('ep','ep',v=>v.toFixed(3));
+  bindSlider('ns','ns',v=>v.toFixed(3));
+
+  document.querySelectorAll('.toggle.p button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.toggle.p button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); selP=parseInt(b.dataset.p);
+  }));
+  document.querySelectorAll('.toggle.a button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.toggle.a button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); selD=parseInt(b.dataset.d);
+  }));
+
+  function setStatus(t,warn){ statusEl.textContent=t; statusEl.classList.toggle('warn',!!warn); }
+
+  document.getElementById('seedBtn').addEventListener('click',()=>{
+    seed(selP,selD,0); setStatus('seeded  parity='+selP+'  arrow='+(selD?'←':'→')+' — medium locking…');
+  });
+
+  document.getElementById('corruptBtn').addEventListener('click',()=>{
+    // heavy kick, keep bits, watch the basin pull it back
+    zR.re+=1.8*gauss(); zR.im+=1.8*gauss(); zL.re+=1.8*gauss(); zL.im+=1.8*gauss();
+    setStatus('corrupted — relaxing back into the basin…');
+    setTimeout(()=>{ const r=readouts();
+      const okP=r.pBit===seedP, okD=r.aBit===seedD;
+      setStatus('recovered  parity '+(okP?'✓':'✗')+'  arrow '+(okD?'✓':'✗'), !(okP&&okD));
+    }, 1400);
+  });
+
+  // ---------- memory bank ----------
+  let bank = store.get('ristikko.bank') || [];
+  const bankEl=document.getElementById('bank');
+
+  function thumb(){ // small snapshot of current scope trail as its own mini-canvas
+    const c=document.createElement('canvas'); c.width=118; c.height=74;
+    const g=c.getContext('2d'); g.fillStyle='#08110f'; g.fillRect(0,0,118,74);
+    const cx=59,cy=37, sc=Math.min(118,74)/(5.2*Math.sqrt(Math.max(P.mu,.3)));
+    let idx=wptr-filled,prev=null;
+    const col = selD? '70,179,201':'232,163,61';
+    for(let i=0;i<filled;i++){ const p=trail[(idx+i+WIN*2)%WIN];
+      const px=cx+p.x*sc, py=cy-p.y*sc, a=i/filled;
+      if(prev){ g.strokeStyle='rgba('+col+','+(0.1+0.7*a)+')'; g.lineWidth=1;
+        g.beginPath();g.moveTo(prev[0],prev[1]);g.lineTo(px,py);g.stroke(); }
+      prev=[px,py]; }
+    return c.toDataURL('image/png');
+  }
+
+  function renderBank(){
+    if(!bank.length){ bankEl.innerHTML='<div class="bank-empty">Empty. Seed a packet and press <b>Store to bank</b>. Each slot keeps the regenerable seed and parameters; recall re-locks the live medium.</div>'; return; }
+    bankEl.innerHTML='';
+    bank.forEach((s,i)=>{
+      const d=document.createElement('div'); d.className='slot'; d.title='Recall';
+      d.innerHTML='<img alt="" style="display:none">'+
+        '<canvas width="118" height="74"></canvas>'+
+        '<div class="meta"><span class="badge"><span class="b p">P'+s.p+'</span>'+
+        '<span class="b a">'+(s.d?'←':'→')+'</span></span>'+
+        '<span style="color:var(--muted)">#'+(i+1)+'</span></div>'+
+        '<div class="del" title="Delete">×</div>';
+      const cv=d.querySelector('canvas'), g=cv.getContext('2d');
+      const im=new Image(); im.onload=()=>g.drawImage(im,0,0); im.src=s.thumb;
+      d.addEventListener('click',(e)=>{ if(e.target.classList.contains('del'))return;
+        Object.assign(P,s.params);
+        ['mu','om','ka','ta','ep'].forEach(k=>{const el=document.getElementById(k);const o=document.getElementById(k+'O'); if(el){el.value=P[k]; o.textContent = (k==='ta')?P[k].toFixed(0):P[k].toFixed(k==='mu'?2:3);}});
+        selP=s.p; selD=s.d;
+        document.querySelectorAll('.toggle.p button').forEach(x=>x.classList.toggle('on',parseInt(x.dataset.p)===s.p));
+        document.querySelectorAll('.toggle.a button').forEach(x=>x.classList.toggle('on',parseInt(x.dataset.d)===s.d));
+        seed(s.p,s.d,0); setStatus('recalled slot #'+(i+1)+' — re-locking, meters confirm…');
+      });
+      d.querySelector('.del').addEventListener('click',(e)=>{ e.stopPropagation();
+        bank.splice(i,1); store.set('ristikko.bank',bank); renderBank(); });
+      bankEl.appendChild(d);
+    });
+  }
+
+  document.getElementById('storeBtn').addEventListener('click',()=>{
+    if(filled<40){ setStatus('seed and let it lock before storing',true); return; }
+    bank.push({p:seedP,d:seedD,params:{mu:P.mu,om:P.om,ka:P.ka,ta:P.ta,ep:P.ep},thumb:thumb()});
+    store.set('ristikko.bank',bank); renderBank();
+    setStatus('stored slot #'+bank.length+' — seed + parameters, not a screenshot');
+  });
+
+  document.getElementById('exportBtn').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(bank,null,1)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='ristikko_bank.json'; a.click(); URL.revokeObjectURL(a.href);
+  });
+  document.getElementById('importBtn').addEventListener('click',()=>document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change',(e)=>{
+    const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
+    rd.onload=()=>{ try{ const arr=JSON.parse(rd.result); if(Array.isArray(arr)){bank=arr;store.set('ristikko.bank',bank);renderBank();setStatus('imported '+bank.length+' slots');} }catch(err){ setStatus('could not read that file',true);} };
+    rd.readAsText(f);
+  });
+
+  // ---------- benchmark ----------
+  const bench=document.getElementById('bench'), bx=bench.getContext('2d');
+  function drawBenchAxes(){
+    const W=bench.width,Hh=bench.height,m=38;
+    bx.clearRect(0,0,W,Hh);
+    bx.strokeStyle='rgba(70,110,120,.25)';bx.lineWidth=1;
+    bx.beginPath();bx.moveTo(m,10);bx.lineTo(m,Hh-m);bx.lineTo(W-10,Hh-m);bx.stroke();
+    bx.fillStyle='#6f8a92';bx.font='11px IBM Plex Mono, monospace';
+    bx.fillText('recall accuracy',6,16);
+    bx.fillText('noise σ →',W-70,Hh-10);
+    [0,0.5,1].forEach(v=>{const y=(Hh-m)-(Hh-m-10)*v;bx.fillStyle='rgba(70,110,120,.5)';
+      bx.fillText(v.toFixed(1),12,y+3);
+      bx.strokeStyle='rgba(70,110,120,.10)';bx.beginPath();bx.moveTo(m,y);bx.lineTo(W-10,y);bx.stroke();});
+    bx.strokeStyle='rgba(115,214,160,.3)';bx.setLineDash([3,3]);
+    const y5=(Hh-m)-(Hh-m-10)*0.5;bx.beginPath();bx.moveTo(m,y5);bx.lineTo(W-10,y5);bx.stroke();bx.setLineDash([]);
+  }
+  drawBenchAxes();
+
+  // headless run of the medium for the benchmark (own small state)
+  function trial(p,d,sigma,params){
+    // seed
+    const sp=p?-1:1, sd=d?-1:1, R=Math.sqrt(Math.max(params.mu,.01));
+    const aR=R*(1+params.ep*sd), aL=R*(1-params.ep*sd);
+    let ZR={re:sp*aR+sigma*gauss(),im:sigma*gauss()};
+    let ZL={re:sp*aL+sigma*gauss(),im:sigma*gauss()};
+    const H2=64; const HR=new Array(H2).fill(0).map(()=>({...ZR})), HL=new Array(H2).fill(0).map(()=>({...ZL}));
+    let hd=0; let Hs=0,As=0,cnt=0;
+    const T=420, ta=Math.min(params.ta,H2-1);
+    for(let n2=0;n2<T;n2++){
+      const di=(hd-ta+H2)%H2, zRd=HR[di], zLd=HL[di];
+      let r2=ZR.re*ZR.re+ZR.im*ZR.im;
+      let dRre=(params.mu*ZR.re-params.om*ZR.im)-r2*ZR.re+params.ka*zRd.re;
+      let dRim=(params.mu*ZR.im+params.om*ZR.re)-r2*ZR.im+params.ka*zRd.im;
+      let l2=ZL.re*ZL.re+ZL.im*ZL.im;
+      let dLre=(params.mu*ZL.re+params.om*ZL.im)-l2*ZL.re+params.ka*zLd.re;
+      let dLim=(params.mu*ZL.im-params.om*ZL.re)-l2*ZL.im+params.ka*zLd.im;
+      ZR.re+=DT*dRre;ZR.im+=DT*dRim;ZL.re+=DT*dLre;ZL.im+=DT*dLim;
+      hd=(hd+1)%H2;HR[hd]={...ZR};HL[hd]={...ZL};
+      if(n2>T*0.5){ const c=Math.cos(params.om*n2),si=Math.sin(params.om*n2);
+        Hs+=(ZR.re*c+ZR.im*si)+(ZL.re*c-ZL.im*si);
+        As+=(ZR.re*ZR.re+ZR.im*ZR.im)-(ZL.re*ZL.re+ZL.im*ZL.im); cnt++; }
+    }
+    const pBit=(Hs/cnt)<0?1:0, aBit=(As/cnt)<0?1:0;
+    return [pBit===p?1:0, aBit===d?1:0];
+  }
+
+  document.getElementById('benchBtn').addEventListener('click',()=>{
+    const stat=document.getElementById('benchStat'); stat.textContent=' running…';
+    const params={mu:P.mu,om:P.om,ka:P.ka,ta:P.ta,ep:P.ep};
+    const sigmas=[]; for(let s=0;s<=1.6;s+=0.1) sigmas.push(+s.toFixed(2));
+    const trials=40;
+    setTimeout(()=>{
+      const accP=[],accA=[];
+      sigmas.forEach(sg=>{ let cp=0,ca=0;
+        for(let t=0;t<trials;t++){ const p=Math.random()<.5?0:1,d=Math.random()<.5?0:1;
+          const r=trial(p,d,sg,params); cp+=r[0]; ca+=r[1]; }
+        accP.push(cp/trials); accA.push(ca/trials); });
+      // draw
+      drawBenchAxes();
+      const W=bench.width,Hh=bench.height,m=38;
+      const X=i=>m+(W-10-m)*(i/(sigmas.length-1));
+      const Y=v=>(Hh-m)-(Hh-m-10)*v;
+      function curve(arr,color){ bx.strokeStyle=color;bx.lineWidth=2;bx.beginPath();
+        arr.forEach((v,i)=>{ i?bx.lineTo(X(i),Y(v)):bx.moveTo(X(i),Y(v)); }); bx.stroke();
+        arr.forEach((v,i)=>{ bx.fillStyle=color;bx.beginPath();bx.arc(X(i),Y(v),2.4,0,7);bx.fill(); }); }
+      curve(accP,'#e8a33d'); curve(accA,'#46b3c9');
+      bx.font='11px IBM Plex Mono, monospace';
+      bx.fillStyle='#e8a33d';bx.fillText('parity',W-96,20);
+      bx.fillStyle='#46b3c9';bx.fillText('arrow',W-96,34);
+      // find arrow half-fail sigma
+      let half='—'; for(let i=0;i<accA.length;i++){ if(accA[i]<0.75){ half=sigmas[i].toFixed(1); break; } }
+      let halfP='—'; for(let i=0;i<accP.length;i++){ if(accP[i]<0.75){ halfP=sigmas[i].toFixed(1); break; } }
+      stat.textContent=' arrow drops below 75% at σ≈'+half+' · parity holds to σ≈'+halfP+' (ε='+params.ep.toFixed(2)+')';
+    },30);
+  });
+
+  // ---------- boot ----------
+  seed(0,0,0);
+  renderBank();
+  setStatus('idle — seed a packet to begin');
+  frame();
+})();
+</script>
+</body>
+</html>
